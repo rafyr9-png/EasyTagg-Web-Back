@@ -1,0 +1,39 @@
+{
+  "name": "easytagg-backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "format": "prettier --write \"**/*.{ts,js,json,md,css}\""
+  },
+  "dependencies": {
+    "better-sqlite3": "latest",
+    "bcryptjs": "latest",
+    "cookie-parser": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "jsonwebtoken": "latest",
+    "nodemailer": "latest",
+    "passport": "latest",
+    "passport-google-oauth20": "latest",
+    "uuid": "latest"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "latest",
+    "@types/cookie-parser": "latest",
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/jsonwebtoken": "latest",
+    "@types/node": "latest",
+    "@types/nodemailer": "latest",
+    "@types/passport": "latest",
+    "@types/passport-google-oauth20": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "prettier": "latest"
+  }
+}
