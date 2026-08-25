@@ -11,6 +11,7 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { v4 as uuid } from 'uuid';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT || 4000);
@@ -39,6 +40,7 @@ if (isProduction && SECRET.length < 32) {
   throw new Error('JWT_SECRET must contain at least 32 characters in production');
 }
 
+fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 const db = new Database(DB_FILE);
 db.pragma('journal_mode = WAL');
 db.exec(`CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,name TEXT,password_hash TEXT,email_verified INTEGER DEFAULT 0,google_id TEXT UNIQUE,created_at TEXT NOT NULL);
