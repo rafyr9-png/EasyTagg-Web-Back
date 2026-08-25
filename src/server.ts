@@ -12,6 +12,7 @@ import { v4 as uuid } from 'uuid';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
+import { signAccessToken } from './lib/jwt.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT || 4000);
@@ -56,10 +57,7 @@ CREATE TABLE IF NOT EXISTS history_events(id TEXT PRIMARY KEY,user_id TEXT NOT N
 `);
 
 const now = () => new Date().toISOString();
-const sign = (u: any) =>
-  jwt.sign({ sub: u.id, email: u.email }, SECRET, {
-    expiresIn: `${Number(process.env.ACCESS_TOKEN_MINUTES || 60)}m` as any,
-  });
+const sign = (u: any) => signAccessToken(u, SECRET);
 const hashToken = (s: string) => bcrypt.hashSync(s, 10);
 const publicUser = (u: any) => ({
   id: u.id,

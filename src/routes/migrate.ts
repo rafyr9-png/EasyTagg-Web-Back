@@ -1,5 +1,6 @@
 import express from 'express';
 import { v4 as uuid } from 'uuid';
+import { TAG_COLUMNS } from '../lib/tagColumns.js';
 
 export default function createMigrateRouter(db: any, auth: any) {
   const r = express.Router();
@@ -70,58 +71,16 @@ export default function createMigrateRouter(db: any, auth: any) {
       }
 
       const tagsArr = Array.isArray(parsed['etd_tags']) ? parsed['etd_tags'] : [];
-      const tagCols = [
-        'tag_id',
-        'user_id',
-        'game_id',
-        'game_name',
-        'game_date',
-        'home_team',
-        'away_team',
-        'game_seconds',
-        'game_time',
-        'clip_start_seconds',
-        'clip_start_time',
-        'clip_end_seconds',
-        'clip_end_time',
-        'inning',
-        'half',
-        'batting_side',
-        'balls_before',
-        'strikes_before',
-        'outs_before',
-        'count_before',
-        'pitcher_id',
-        'pitcher',
-        'pitcher_hand',
-        'pitcher_pitch_number',
-        'batter_id',
-        'batter',
-        'batter_hand',
-        'pitch_type',
-        'pitch_mph',
-        'zone_status',
-        'zone_x',
-        'zone_y',
-        'result',
-        'final_result',
-        'contact_quality',
-        'trajectory',
-        'spray_location',
-        'exit_velocity',
-        'note',
-        'created_at',
-      ];
-      const tagPlaceholders = tagCols.map(() => '?').join(',');
+      const tagPlaceholders = TAG_COLUMNS.map(() => '?').join(',');
       const tagStmt = db.prepare(
-        `INSERT OR IGNORE INTO tags(${tagCols.join(',')}) VALUES(${tagPlaceholders})`
+        `INSERT OR IGNORE INTO tags(${TAG_COLUMNS.join(',')}) VALUES(${tagPlaceholders})`
       );
       for (const t of tagsArr) {
         const tag = Object.assign({}, t);
         tag.tag_id = String(tag.tag_id || uuid());
         tag.user_id = (req as any).auth.sub;
         tag.created_at = String(tag.created_at || nowTs);
-        const vals = tagCols.map((c) => (tag[c] === undefined ? null : tag[c]));
+        const vals = TAG_COLUMNS.map((c) => (tag[c] === undefined ? null : tag[c]));
         tagStmt.run(...vals);
         tagsInserted++;
       }

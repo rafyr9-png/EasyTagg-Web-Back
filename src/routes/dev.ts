@@ -1,7 +1,6 @@
 import express from 'express';
 import { v4 as uuid } from 'uuid';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { signAccessToken } from '../lib/jwt.js';
 
 export default function createDevRouter(db: any, SECRET: string) {
   const r = express.Router();
@@ -21,9 +20,7 @@ export default function createDevRouter(db: any, SECRET: string) {
         ).run(id, email, 'Dev User', null, 1, null, now);
         u = db.prepare('SELECT * FROM users WHERE id=?').get(id);
       }
-      const token = jwt.sign({ sub: u.id, email: u.email }, SECRET, {
-        expiresIn: `${Number(process.env.ACCESS_TOKEN_MINUTES || 60)}m` as any,
-      });
+      const token = signAccessToken(u, SECRET);
       return res.json({
         accessToken: token,
         user: { id: u.id, email: u.email, name: u.name || '' },

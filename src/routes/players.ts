@@ -49,22 +49,25 @@ export default function createPlayersRouter(db: any, auth: any) {
   r.put('/players/:id', auth, (req, res) => {
     const id = String(req.params.id || '');
     const nowTs = new Date().toISOString();
-    db.prepare(
-      'UPDATE players SET num=?,name=?,team=?,role=?,side=?,bat=?,thr=?,position=?,db_player_code=?,updated_at=? WHERE id=? AND user_id=?'
-    ).run(
-      String(req.body.num || ''),
-      String(req.body.name || ''),
-      String(req.body.team || ''),
-      String(req.body.role || ''),
-      String(req.body.side || ''),
-      String(req.body.bat || ''),
-      String(req.body.thr || ''),
-      String(req.body.position || ''),
-      String(req.body.db_player_code || ''),
-      nowTs,
-      id,
-      (req as any).auth.sub
-    );
+    const result = db
+      .prepare(
+        'UPDATE players SET num=?,name=?,team=?,role=?,side=?,bat=?,thr=?,position=?,db_player_code=?,updated_at=? WHERE id=? AND user_id=?'
+      )
+      .run(
+        String(req.body.num || ''),
+        String(req.body.name || ''),
+        String(req.body.team || ''),
+        String(req.body.role || ''),
+        String(req.body.side || ''),
+        String(req.body.bat || ''),
+        String(req.body.thr || ''),
+        String(req.body.position || ''),
+        String(req.body.db_player_code || ''),
+        nowTs,
+        id,
+        (req as any).auth.sub
+      );
+    if (result.changes === 0) return res.status(404).json({ error: 'Player not found' });
     const p = db
       .prepare('SELECT * FROM players WHERE id=? AND user_id=?')
       .get(id, (req as any).auth.sub);

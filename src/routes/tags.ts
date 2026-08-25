@@ -1,5 +1,6 @@
 import express from 'express';
 import { v4 as uuid } from 'uuid';
+import { TAG_COLUMNS } from '../lib/tagColumns.js';
 
 export default function createTagsRouter(db: any, auth: any) {
   const r = express.Router();
@@ -18,71 +19,38 @@ export default function createTagsRouter(db: any, auth: any) {
   });
   r.post('/tags', auth, (req, res) => {
     const t = Object.assign({}, req.body || {});
+    const gameId = String(t.game_id || '');
+    if (!gameId) return res.status(400).json({ error: 'game_id is required' });
+    const game = db
+      .prepare('SELECT id FROM games WHERE id=? AND user_id=?')
+      .get(gameId, (req as any).auth.sub);
+    if (!game) return res.status(404).json({ error: 'Game not found' });
     const id = uuid();
     t.tag_id = id;
     t.user_id = (req as any).auth.sub;
     t.created_at = new Date().toISOString();
-    const cols = [
-      'tag_id',
-      'user_id',
-      'game_id',
-      'game_name',
-      'game_date',
-      'home_team',
-      'away_team',
-      'game_seconds',
-      'game_time',
-      'clip_start_seconds',
-      'clip_start_time',
-      'clip_end_seconds',
-      'clip_end_time',
-      'inning',
-      'half',
-      'batting_side',
-      'balls_before',
-      'strikes_before',
-      'outs_before',
-      'count_before',
-      'pitcher_id',
-      'pitcher',
-      'pitcher_hand',
-      'pitcher_pitch_number',
-      'batter_id',
-      'batter',
-      'batter_hand',
-      'pitch_type',
-      'pitch_mph',
-      'zone_status',
-      'zone_x',
-      'zone_y',
-      'result',
-      'final_result',
-      'contact_quality',
-      'trajectory',
-      'spray_location',
-      'exit_velocity',
-      'note',
-      'created_at',
-    ];
-    const vals = cols.map((c) => t[c] ?? null);
-    const placeholders = cols.map(() => '?').join(',');
-    db.prepare(`INSERT INTO tags(${cols.join(',')}) VALUES(${placeholders})`).run(...vals);
+    const vals = TAG_COLUMNS.map((c) => t[c] ?? null);
+    const placeholders = TAG_COLUMNS.map(() => '?').join(',');
+    db.prepare(`INSERT INTO tags(${TAG_COLUMNS.join(',')}) VALUES(${placeholders})`).run(...vals);
     res.json(t);
   });
   r.put('/tags/:id', auth, (req, res) => {
     const id = String(req.params.id || '');
     const t = req.body || {};
-    db.prepare(
-      'UPDATE tags SET result=?,final_result=?,contact_quality=?,trajectory=?,note=? WHERE tag_id=? AND user_id=?'
-    ).run(
-      String(t.result || ''),
-      String(t.final_result || ''),
-      String(t.contact_quality || ''),
-      String(t.trajectory || ''),
-      String(t.note || ''),
-      id,
-      (req as any).auth.sub
-    );
+    const result = db
+      .prepare(
+        'UPDATE tags SET result=?,final_result=?,contact_quality=?,trajectory=?,note=? WHERE tag_id=? AND user_id=?'
+      )
+      .run(
+        String(t.result || ''),
+        String(t.final_result || ''),
+        String(t.contact_quality || ''),
+        String(t.trajectory || ''),
+        String(t.note || ''),
+        id,
+        (req as any).auth.sub
+      );
+    if (result.changes === 0) return res.status(404).json({ error: 'Tag not found' });
     const row = db
       .prepare('SELECT * FROM tags WHERE tag_id=? AND user_id=?')
       .get(id, (req as any).auth.sub);

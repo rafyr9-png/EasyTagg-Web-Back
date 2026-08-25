@@ -31,18 +31,21 @@ export default function createGamesRouter(db: any, auth: any) {
   r.put('/games/:id', auth, (req, res) => {
     const id = String(req.params.id || '');
     const nowTs = new Date().toISOString();
-    db.prepare(
-      'UPDATE games SET name=?,date=?,home=?,away=?,game_type=?,updated_at=? WHERE id=? AND user_id=?'
-    ).run(
-      String(req.body.name || ''),
-      String(req.body.date || ''),
-      String(req.body.home || ''),
-      String(req.body.away || ''),
-      String(req.body.game_type || ''),
-      nowTs,
-      id,
-      (req as any).auth.sub
-    );
+    const result = db
+      .prepare(
+        'UPDATE games SET name=?,date=?,home=?,away=?,game_type=?,updated_at=? WHERE id=? AND user_id=?'
+      )
+      .run(
+        String(req.body.name || ''),
+        String(req.body.date || ''),
+        String(req.body.home || ''),
+        String(req.body.away || ''),
+        String(req.body.game_type || ''),
+        nowTs,
+        id,
+        (req as any).auth.sub
+      );
+    if (result.changes === 0) return res.status(404).json({ error: 'Game not found' });
     const g = db
       .prepare('SELECT * FROM games WHERE id=? AND user_id=?')
       .get(id, (req as any).auth.sub);
