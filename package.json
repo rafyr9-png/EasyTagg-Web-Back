@@ -10,11 +10,11 @@
     "format": "prettier --write \"**/*.{ts,js,json,md,css}\""
   },
   "dependencies": {
-    "better-sqlite3": "latest",
     "bcryptjs": "latest",
+    "better-sqlite3": "latest",
     "cookie-parser": "latest",
     "cors": "latest",
-    "dotenv": "latest",
+    "dotenv": "^17.4.2",
     "express": "latest",
     "jsonwebtoken": "latest",
     "nodemailer": "latest",
@@ -32,8 +32,8 @@
     "@types/nodemailer": "latest",
     "@types/passport": "latest",
     "@types/passport-google-oauth20": "latest",
+    "prettier": "latest",
     "tsx": "latest",
-    "typescript": "latest",
-    "prettier": "latest"
+    "typescript": "latest"
   }
 }

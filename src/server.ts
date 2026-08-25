@@ -19,10 +19,15 @@ const FRONTEND = process.env.FRONTEND_URL || serviceUrl || `http://localhost:517
 const PUBLIC_API = process.env.PUBLIC_API_URL || serviceUrl || `http://localhost:${PORT}`;
 const SECRET = process.env.JWT_SECRET || (isProduction ? '' : 'dev-change-me');
 const DB_FILE = process.env.DB_FILE || 'data/easytagg.sqlite';
+
 const smtpConfigured = Boolean(
   process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_FROM
 );
-const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+// Demo-only escape hatch: skip email verification when there's no SMTP provider set up.
+// Never enable this for a deployment that holds real user data.
+const skipEmailVerification = process.env.SKIP_EMAIL_VERIFICATION === 'true';
+
 const allowedOrigins = new Set(
   (process.env.ALLOWED_ORIGINS || FRONTEND)
     .split(',')
@@ -47,6 +52,7 @@ CREATE TABLE IF NOT EXISTS tags(tag_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,ga
 CREATE TABLE IF NOT EXISTS lineups(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,game_id TEXT,player_id TEXT,slot INTEGER,role TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS history_events(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,game_id TEXT,type TEXT,payload_json TEXT,created_at TEXT NOT NULL);
 `);
+
 const now = () => new Date().toISOString();
 const sign = (u: any) =>
   jwt.sign({ sub: u.id, email: u.email }, SECRET, {
@@ -59,6 +65,7 @@ const publicUser = (u: any) => ({
   name: u.name || '',
   emailVerified: !!u.email_verified,
 });
+
 function refresh(res: Response, u: any) {
   const raw = uuid() + uuid();
   db.prepare('INSERT INTO tokens VALUES(?,?,?,?,?,?,?)').run(
@@ -78,6 +85,7 @@ function refresh(res: Response, u: any) {
   });
   return raw;
 }
+
 async function sendMail(to: string, subject: string, html: string) {
   if (!process.env.SMTP_HOST) {
     if (isProduction) throw new Error('SMTP is not configured');
@@ -92,6 +100,7 @@ async function sendMail(to: string, subject: string, html: string) {
   });
   await tr.sendMail({ from: process.env.SMTP_FROM, to, subject, html });
 }
+
 function issueOneTime(userId: string, type: string) {
   const raw = uuid() + uuid();
   db.prepare('INSERT INTO tokens VALUES(?,?,?,?,?,?,?)').run(
@@ -105,6 +114,7 @@ function issueOneTime(userId: string, type: string) {
   );
   return raw;
 }
+
 async function consume(raw: string, type: string) {
   const rows: any[] = db
     .prepare('SELECT * FROM tokens WHERE type=? AND used_at IS NULL AND expires_at>?')
@@ -116,6 +126,7 @@ async function consume(raw: string, type: string) {
     }
   return null;
 }
+
 passport.use(
   new GoogleStrategy(
     {
@@ -151,11 +162,16 @@ passport.use(
     }
   )
 );
+
 const app = express();
+
+const isLocalhostOrigin = (origin: string) => /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      if (!isProduction && isLocalhostOrigin(origin)) return callback(null, true);
       return callback(new Error('Origin is not allowed'));
     },
     credentials: true,
@@ -164,6 +180,7 @@ app.use(
 app.use(express.json({ limit: '25mb' }));
 app.use(cookieParser());
 app.use(passport.initialize());
+
 function auth(req: Request, res: Response, next: NextFunction) {
   const h = req.headers.authorization;
   if (!h?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
@@ -174,9 +191,10 @@ function auth(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ error: 'Session expired' });
   }
 }
+
 app.post('/api/auth/register', async (req, res) => {
   try {
-    if (isProduction && !smtpConfigured)
+    if (isProduction && !smtpConfigured && !skipEmailVerification)
       return res.status(503).json({ error: 'Email delivery is not configured' });
     const email = String(req.body.email || '')
         .trim()
@@ -194,13 +212,17 @@ app.post('/api/auth/register', async (req, res) => {
       email,
       name,
       password_hash: await bcrypt.hash(password, 12),
-      email_verified: 0,
+      email_verified: skipEmailVerification ? 1 : 0,
       google_id: null,
       created_at: now(),
     };
     db.prepare(
       'INSERT INTO users(id,email,name,password_hash,email_verified,google_id,created_at) VALUES(@id,@email,@name,@password_hash,@email_verified,@google_id,@created_at)'
     ).run(u);
+    if (skipEmailVerification) {
+      res.json({ ok: true, skippedVerification: true });
+      return;
+    }
     const t = issueOneTime(u.id, 'verify');
     await sendMail(
       email,
@@ -212,12 +234,14 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 app.get('/api/auth/verify', async (req, res) => {
   const id = await consume(String(req.query.token || ''), 'verify');
   if (!id) return res.status(400).send('Invalid or expired verification link');
   db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(id);
   res.redirect(FRONTEND + '/?verified=1');
 });
+
 app.post('/api/auth/login', async (req, res) => {
   const email = String(req.body.email || '').toLowerCase(),
     u: any = db.prepare('SELECT * FROM users WHERE email=?').get(email);
@@ -231,6 +255,7 @@ app.post('/api/auth/login', async (req, res) => {
   refresh(res, u);
   res.json({ accessToken: sign(u), user: publicUser(u) });
 });
+
 app.post('/api/auth/magic/request', async (req, res) => {
   if (isProduction && !smtpConfigured)
     return res.status(503).json({ error: 'Email delivery is not configured' });
@@ -246,6 +271,7 @@ app.post('/api/auth/magic/request', async (req, res) => {
   }
   res.json({ ok: true });
 });
+
 app.get('/api/auth/magic/consume', async (req, res) => {
   const id = await consume(String(req.query.token || ''), 'magic');
   if (!id) return res.status(400).send('Invalid or expired magic link');
@@ -253,14 +279,26 @@ app.get('/api/auth/magic/consume', async (req, res) => {
   db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(id);
   res.redirect(`${FRONTEND}/?token=${encodeURIComponent(sign(u))}`);
 });
+
+// RUTA GOOGLE OAUTH CORREGIDA (evalúa variables en tiempo real)
 app.get(
   '/api/auth/google',
   (_req, res, next) => {
-    if (!googleConfigured) return res.status(503).send('Google OAuth is not configured');
+    const isGoogleConfigured = Boolean(
+      process.env.GOOGLE_CLIENT_ID && 
+      process.env.GOOGLE_CLIENT_SECRET &&
+      process.env.GOOGLE_CLIENT_ID !== 'disabled'
+    );
+
+    if (!isGoogleConfigured) {
+      console.error('[OAuth Error] GOOGLE_CLIENT_ID no configurado correctamente en .env');
+      return res.status(503).send('Google OAuth is not configured');
+    }
     next();
   },
   passport.authenticate('google', { scope: ['profile', 'email'], session: false })
 );
+
 app.get(
   '/api/auth/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: FRONTEND + '/?oauth=failed' }),
@@ -270,21 +308,25 @@ app.get(
     res.redirect(`${FRONTEND}/?token=${encodeURIComponent(sign(u))}`);
   }
 );
+
 app.get('/api/auth/me', auth, (req, res) => {
   const u: any = db.prepare('SELECT * FROM users WHERE id=?').get((req as any).auth.sub);
   if (!u) return res.status(404).json({ error: 'User not found' });
   res.json({ user: publicUser(u) });
 });
+
 app.post('/api/auth/logout', (_req, res) => {
   res.clearCookie('et_refresh');
   res.json({ ok: true });
 });
+
 app.get('/api/sync/snapshot', auth, (req, res) => {
   const row: any = db
     .prepare('SELECT data_json,updated_at FROM snapshots WHERE user_id=?')
     .get((req as any).auth.sub);
   res.json({ data: row ? JSON.parse(row.data_json) : {}, updatedAt: row?.updated_at || null });
 });
+
 app.put('/api/sync/snapshot', auth, (req, res) => {
   const data = req.body?.data;
   if (!data || typeof data !== 'object') return res.status(400).json({ error: 'Invalid snapshot' });
@@ -317,4 +359,7 @@ app.use((req, res, next) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log(`Easy Tagg API http://localhost:${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Easy Tagg API http://localhost:${PORT}`);
+  console.log(`Google OAuth status: ${process.env.GOOGLE_CLIENT_ID ? 'Configurado ✅' : 'No detectado ❌'}`);
+});
